@@ -1,0 +1,54 @@
+{
+  "template": "https://github.com/plasma-ai/templates.git",
+  "commit": "64551044b5b5ad90de3a01064910306aad0e5c9c",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "branch": "main",
+      "python": ">=3.11,<3.15",
+      "default_python": "3.14",
+      "project": {
+        "name": "mdformat_wiki",
+        "package": "mdformat-wiki",
+        "title": "Mdformat Wiki",
+        "description": "Mdformat plugin preserving wikilinks, frontmatter, and index delimiter.",
+        "version": "0.0.0",
+        "authors": [
+          {
+            "name": "Andrew Turner",
+            "email": "aturner@plasma.ai"
+          },
+          {
+            "name": "Nicholas Diao",
+            "email": "ndiao@plasma.ai"
+          }
+        ],
+        "maintainers": [
+          {
+            "name": "Andrew Turner",
+            "email": "aturner@plasma.ai"
+          },
+          {
+            "name": "Nicholas Diao",
+            "email": "ndiao@plasma.ai"
+          }
+        ],
+        "codecov": {
+          "token": "hOhrWzJqNu"
+        }
+      },
+      "github": {
+        "org": "plasma-ai",
+        "user": "",
+        "repo": "mdformat-wiki"
+      },
+      "urls": {
+        "domain": "plasma.ai",
+        "docs": ""
+      },
+      "_template": "https://github.com/plasma-ai/templates.git",
+      "_commit": "64551044b5b5ad90de3a01064910306aad0e5c9c"
+    }
+  },
+  "directory": "package"
+}

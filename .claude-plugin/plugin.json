@@ -1,0 +1,14 @@
+{
+  "name": "mdformat_wiki",
+  "displayName": "Mdformat Wiki",
+  "version": "0.0.0",
+  "description": "Mdformat plugin preserving wikilinks, frontmatter, and index delimiter.",
+  "author": {
+    "name": "Andrew Turner",
+    "email": "aturner@plasma.ai",
+    "url": "https://plasma.ai"
+  },
+  "skills": ["./mdformat_wiki/skills"],
+  "repository": "https://github.com/plasma-ai/mdformat-wiki",
+  "keywords": ["mdformat_wiki"]
+}
