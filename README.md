@@ -1,7 +1,7 @@
-# mdformat_wiki
+# mdformat-wiki
 
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![build](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/build.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/build.yaml)
-[![docs](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/docs.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/docs.yaml)
 [![lint](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/lint.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/lint.yaml)
 [![tests](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/tests.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/tests.yaml)
 [![codecov](https://codecov.io/gh/plasma-ai/mdformat-wiki/branch/main/graph/badge.svg?token=hOhrWzJqNu)](https://codecov.io/gh/plasma-ai/mdformat-wiki)
@@ -9,55 +9,73 @@
 
 Mdformat plugin preserving wikilinks, frontmatter, and index delimiter.
 
----
+Built for wikis created with
+[plasma-wiki](https://github.com/plasma-ai/wiki) — add it wherever
+mdformat runs over a wiki maintained by `plasma-wiki`.
 
-**Source**: [https://github.com/plasma-ai/mdformat-wiki](https://github.com/plasma-ai/mdformat-wiki)
+______________________________________________________________________
 
-**Package**: [https://pypi.org/project/mdformat-wiki/](https://pypi.org/project/mdformat-wiki/)
+**Source**:
+[https://github.com/plasma-ai/mdformat-wiki](https://github.com/plasma-ai/mdformat-wiki)
 
----
+**Package**:
+[https://pypi.org/project/mdformat-wiki/](https://pypi.org/project/mdformat-wiki/)
+
+______________________________________________________________________
 
 ## Installation
 
-Install the `mdformat_wiki` package from PyPI:
+Install the `mdformat-wiki` package from PyPI, alongside
+[mdformat](https://mdformat.readthedocs.io):
 
 ```bash
 pip install mdformat-wiki
 ```
 
-Use `pipx install mdformat-wiki` or
-`uv tool install mdformat-wiki` to install
-in an isolated environment.
-
-### Skill
-
-Install the `/mdformat_wiki` skill for your agent via the
-plugin marketplace (Claude Code and Codex):
-
-```bash
-# Claude Code
-/plugin marketplace add plasma-ai/plugins
-/plugin install mdformat_wiki@plasma
-
-# Codex
-codex plugin marketplace add plasma-ai/plugins
-codex plugin add mdformat_wiki@plasma
-```
-
-Or from the CLI, which copies the skill into `~/.claude/skills` and
-`~/.agents/skills` (add `--project` for the current project only):
-
-```bash
-mdformat_wiki install
-```
+Use `uv tool install mdformat --with mdformat-wiki` to install in an
+isolated environment.
 
 ## Usage
 
-Basic usage:
+Once installed, mdformat picks the plugin up automatically and stops
+disturbing wiki page faces:
 
-```python
-import mdformat_wiki
+- `[[...]]` wikilinks parse atomically (single line, no nesting) and are
+  never backslash-escaped — including the `[[target|label]]` pipe form.
+- YAML frontmatter at the start of a document renders byte-verbatim
+  (fences and content untouched).
+- A thematic break written exactly as `***` keeps that face; every other
+  break style is normalized as usual.
+
+### pre-commit
+
+Repos that format markdown with a [pre-commit](https://pre-commit.com)
+hook need one line — add the plugin to the mdformat hook's
+`additional_dependencies`:
+
+```yaml
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies: [mdformat-wiki]
 ```
+
+If the hook already lists
+[mdformat-frontmatter](https://github.com/butler54/mdformat-frontmatter),
+remove it — this plugin already renders frontmatter byte-verbatim. Both
+plugins register a frontmatter renderer, mdformat only warns about the
+conflict, and whichever the environment discovers first wins: when
+`mdformat-frontmatter` wins, it re-serializes the YAML (quoting values,
+blanking `null`s) instead of leaving it untouched.
+
+### Footnotes
+
+Baseline mdformat escapes footnote definitions (`[^1]:` becomes
+`\[^1\]:`). If your pages use footnotes, add
+[mdformat-footnote](https://github.com/executablebooks/mdformat-footnote)
+alongside this plugin — the two compose cleanly (definitions relocate to
+the document bottom, which is semantically neutral).
 
 ## Development
 
@@ -96,3 +114,9 @@ Run linters and formatters:
 ```bash
 pre-commit run --all-files
 ```
+
+## License
+
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
+
+Copyright © 2026 Plasma AI

@@ -1,5 +1,7 @@
 # https://pre-commit.com
 
+exclude: ^tests/fixtures/
+
 repos:
   - repo: local
     hooks:
