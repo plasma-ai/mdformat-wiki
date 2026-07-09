@@ -12,7 +12,7 @@
         "package": "mdformat-wiki",
         "title": "Mdformat Wiki",
         "description": "Mdformat plugin preserving wikilinks, frontmatter, and index delimiter.",
-        "version": "0.0.0",
+        "version": "0.1.0",
         "authors": [
           {
             "name": "Andrew Turner",
