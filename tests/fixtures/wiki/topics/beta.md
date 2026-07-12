@@ -1,6 +1,6 @@
 ---
 name: topics/beta
-desc: ...
+desc: A deliberately long generated description that pushes this link row well past seventy-two columns to pin the unwrapped face.
 category: null
 tags: []
 sources: []

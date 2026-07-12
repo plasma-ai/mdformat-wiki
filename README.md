@@ -42,6 +42,9 @@ disturbing wiki page faces:
 
 - `[[...]]` wikilinks parse atomically (single line, no nesting) and are
   never backslash-escaped — including the `[[target|label]]` pipe form.
+- Wikilinks are wrap-atomic: under `--wrap`, the whole `[[...]]` face
+  moves between lines as one unit, like an inline code span, while the
+  prose around it fills normally.
 - YAML frontmatter at the start of a document renders byte-verbatim
   (fences and content untouched).
 - A thematic break written exactly as `***` keeps that face; every other

@@ -12,6 +12,7 @@ __all__ = [
     'test_front_matter_faces',
     'test_thematic_break_faces',
     'test_thematic_break_in_blockquote_defaults',
+    'test_wikilink_wrap_atomicity',
     'test_footnote_composition',
 ]
 
@@ -101,6 +102,48 @@ def test_thematic_break_in_blockquote_defaults() -> None:
     """A ``***`` nested in a blockquote falls back to the default face."""
     formatted = mdformat.text('> ***\n', extensions={'wiki'})
     assert formatted == f'> {_DEFAULT_HR}\n'
+
+
+@pytest.mark.parametrize(
+    ('source', 'expected'),
+    [
+        (
+            'Prose that runs long enough to push the following'
+            ' [[conventions/python/modules|python module shape]] link'
+            ' across the boundary.\n',
+            'Prose that runs long enough to push the following\n'
+            '[[conventions/python/modules|python module shape]] link'
+            ' across the\nboundary.\n',
+        ),
+        (
+            '[[topics/beta|beta]]: A deliberately long generated description'
+            ' that pushes this link row well past seventy-two columns.\n',
+            '[[topics/beta|beta]]: A deliberately long generated description'
+            ' that\npushes this link row well past seventy-two columns.\n',
+        ),
+        (
+            'A long prose paragraph that mentions [[topics/alpha]] midway'
+            ' through and therefore wraps like any other body paragraph.\n',
+            'A long prose paragraph that mentions [[topics/alpha]] midway'
+            ' through and\ntherefore wraps like any other body paragraph.\n',
+        ),
+    ],
+    ids=['spaced-label-moves-whole', 'link-row-tail-wraps', 'prose-wraps'],
+)
+def test_wikilink_wrap_atomicity(source: str, expected: str) -> None:
+    """Wikilinks are wrap-atomic; surrounding prose wraps freely.
+
+    A wikilink behaves like an inline code span under ``--wrap``: its
+    internal spaces are never wrap points, so the whole ``[[...]]``
+    face moves between lines as one unit while the text around it --
+    including a link row's description tail -- fills normally.
+    """
+    formatted = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
+    assert formatted == expected
+
+    # second pass is stable
+    second = mdformat.text(formatted, options={'wrap': 72}, extensions={'wiki'})
+    assert second == formatted
 
 
 def test_footnote_composition() -> None:
