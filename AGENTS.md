@@ -39,6 +39,13 @@ uv run --no-sync pytest
 
 # run pre-commit
 uv run --no-sync pre-commit run [--all-files]
+
+# run type check (not enforced)
+uv run --no-sync pyright
+
+# run security scan (not enforced)
+uv sync --inexact --group security
+uv run --no-sync safety scan
 ```
 
 The test suite uses `pytest` with `--doctest-modules` enabled.
