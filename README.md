@@ -52,6 +52,11 @@ disturbing wiki page faces:
 - ATX headings keep their original inline face verbatim — unbalanced
   emphasis is never backslash-escaped and an optional closing `#`
   sequence survives; setext headings still normalize to ATX.
+- An index link-row description (`[[target|label]]: text`) renders its
+  text verbatim — a bare `*` or `_` (`**kwargs`, `_verb`) is never
+  backslash-escaped — while still wrapping under `--wrap`. A row whose
+  link alone exceeds the width breaks after `]]:`, dropping the
+  description to the next line.
 
 ### pre-commit
 

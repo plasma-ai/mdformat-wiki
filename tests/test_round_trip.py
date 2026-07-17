@@ -172,6 +172,46 @@ def test_heading_in_list_keeps_face() -> None:
 
 
 @pytest.mark.parametrize(
+    ('source_row', 'rendered_row'),
+    [
+        (
+            '[[api/kwargs|kwargs]]: Accepts **kwargs and _verb helpers.',
+            '[[api/kwargs|kwargs]]: Accepts **kwargs and _verb helpers.',
+        ),
+        (
+            '[[docs/index-pages|index-pages]]: The _index.md block above'
+            ' the *** delimiter.',
+            '[[docs/index-pages|index-pages]]: The _index.md block above'
+            ' the *** delimiter.',
+        ),
+    ],
+    ids=['emphasis-markers', 'underscores-and-hr'],
+)
+def test_link_row_desc_faces(source_row: str, rendered_row: str) -> None:
+    """An index link-row desc renders face-verbatim, never escaped.
+
+    A desc is plain prose whose bare ``*`` or ``_`` (``**kwargs``,
+    ``_verb``) would otherwise gain a backslash and diverge the row from
+    the page's frontmatter desc, so the wiki tool overwrites it and the
+    two formatters fight. Ordinary prose keeps the default escaping.
+    """
+    source = f'{source_row}\n'
+    expected = f'{rendered_row}\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == expected
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
+def test_non_row_prose_still_escapes() -> None:
+    """Only a link-row desc bypasses escaping; ordinary prose does not."""
+    formatted = mdformat.text('Prose with **kwargs and _verb.\n', extensions={'wiki'})
+    assert formatted == 'Prose with \\*\\*kwargs and \\_verb.\n'
+
+
+@pytest.mark.parametrize(
     ('source', 'expected'),
     [
         (
@@ -194,8 +234,21 @@ def test_heading_in_list_keeps_face() -> None:
             'A long prose paragraph that mentions [[topics/alpha]] midway'
             ' through and\ntherefore wraps like any other body paragraph.\n',
         ),
+        (
+            '[[conventions/testing/style/docstrings-and-annotations'
+            '|docstrings-and-annotations]]: Uses **kwargs and'
+            ' __init__.py aggregation.\n',
+            '[[conventions/testing/style/docstrings-and-annotations'
+            '|docstrings-and-annotations]]:\nUses **kwargs and'
+            ' __init__.py aggregation.\n',
+        ),
     ],
-    ids=['spaced-label-moves-whole', 'link-row-tail-wraps', 'prose-wraps'],
+    ids=[
+        'spaced-label-moves-whole',
+        'link-row-tail-wraps',
+        'prose-wraps',
+        'long-link-desc-verbatim',
+    ],
 )
 def test_wikilink_wrap_atomicity(source: str, expected: str) -> None:
     """Wikilinks are wrap-atomic; surrounding prose wraps freely.

@@ -7,10 +7,17 @@ through the ``mdformat.parser_extension`` entry point declared in
 
 from __future__ import annotations
 
+import re
+
 from markdown_it import MarkdownIt
 from markdown_it.rules_core import StateCore
 from markdown_it.rules_inline import StateInline
-from mdformat.renderer import DEFAULT_RENDERERS, RenderContext, RenderTreeNode
+from mdformat.renderer import (
+    DEFAULT_RENDERERS,
+    WRAP_POINT,
+    RenderContext,
+    RenderTreeNode,
+)
 from mdit_py_plugins.front_matter import front_matter_plugin
 
 # env key for the source lines stashed at parse time (see the renderers)
@@ -110,9 +117,49 @@ def _render_heading(node: RenderTreeNode, context: RenderContext) -> str:
     return DEFAULT_RENDERERS['heading'](node, context)
 
 
+def _in_block(block_name: str, node: RenderTreeNode) -> bool:
+    """Whether ``node`` sits inside a block of the given type."""
+    while node.parent:
+        if node.parent.type == block_name:
+            return True
+        node = node.parent
+    return False
+
+
+def _is_link_row(inline: RenderTreeNode) -> bool:
+    """Whether an inline node opens an index link row (``[[t|l]]: ...``)."""
+    children = inline.children or ()
+    return (
+        len(children) >= 2
+        and children[0].type == 'wikilink'
+        and children[1].type == 'text'
+        and children[1].content.startswith(':')
+    )
+
+
+def _render_text(node: RenderTreeNode, context: RenderContext) -> str:
+    """Render an index link-row desc face-verbatim, wrapping but not escaping.
+
+    A link row's desc parses as ordinary inline text, so the default renderer
+    escapes a bare ``*`` or ``_`` (``**kwargs``, ``_verb``) that the page's
+    frontmatter desc holds unescaped -- the escape diverges the row from its
+    source, and the wiki tool then overwrites it back, so the two fight every
+    run. Descs are plain prose: a desc token renders as-is, only wrap points
+    go in. All other text keeps the default escaping.
+    """
+    inline = node.parent
+    if inline is not None and inline.type == 'inline' and _is_link_row(inline):
+        text = node.content
+        if context.do_wrap and _in_block('paragraph', node):
+            text = re.sub(r'[ \t\n]+', WRAP_POINT, text)
+        return text
+    return DEFAULT_RENDERERS['text'](node, context)
+
+
 RENDERERS = {
     'wikilink': _render_wikilink,
     'front_matter': _render_front_matter,
     'hr': _render_hr,
     'heading': _render_heading,
+    'text': _render_text,
 }
