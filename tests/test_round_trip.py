@@ -12,6 +12,9 @@ __all__ = [
     'test_front_matter_faces',
     'test_thematic_break_faces',
     'test_thematic_break_in_blockquote_defaults',
+    'test_heading_faces',
+    'test_heading_in_blockquote_defaults',
+    'test_heading_in_list_keeps_face',
     'test_wikilink_wrap_atomicity',
     'test_footnote_composition',
 ]
@@ -26,6 +29,7 @@ _ROUND_TRIP_CORPUS = [
     'obsidian.md',
     'gaphunt.md',
     'code-fences.md',
+    'headings.md',
 ]
 # mdformat's default thematic-break face (what non-``***`` sources become)
 _DEFAULT_HR = '_' * 70
@@ -37,8 +41,8 @@ def test_round_trip(relpath: str) -> None:
 
     The corpora cover the generated wiki faces (frontmatter, wikilink
     blocks, the ``***`` delimiter), Obsidian body constructs (embeds,
-    callouts, block refs, tags), tables/tasklists/footnote refs, and
-    code fences containing ``[[...]]``.
+    callouts, block refs, tags), tables/tasklists/footnote refs, code
+    fences containing ``[[...]]``, and adversarial ATX heading faces.
     """
     source = (_FIXTURES / relpath).read_text(encoding='utf-8')
     formatted = mdformat.text(source, extensions={'wiki'})
@@ -102,6 +106,69 @@ def test_thematic_break_in_blockquote_defaults() -> None:
     """A ``***`` nested in a blockquote falls back to the default face."""
     formatted = mdformat.text('> ***\n', extensions={'wiki'})
     assert formatted == f'> {_DEFAULT_HR}\n'
+
+
+@pytest.mark.parametrize(
+    ('source_head', 'rendered_head'),
+    [
+        ('# Star* dangling *star', '# Star* dangling *star'),
+        ('# Trailing hash #', '# Trailing hash #'),
+        ('# My *Wiki*', '# My *Wiki*'),
+        ('# snake_case_title', '# snake_case_title'),
+        ('# Brackets [not a link]', '# Brackets [not a link]'),
+        ('# Code `span`', '# Code `span`'),
+        ('  # Indented face', '# Indented face'),
+        ('Setext face\n===========', '# Setext face'),
+    ],
+    ids=[
+        'dangling-star',
+        'trailing-hash',
+        'balanced-emphasis',
+        'underscores',
+        'brackets',
+        'backticks',
+        'indented',
+        'setext',
+    ],
+)
+def test_heading_faces(source_head: str, rendered_head: str) -> None:
+    """An ATX heading keeps its source face; only its indent normalizes.
+
+    Unbalanced emphasis is never backslash-escaped and an optional
+    closing ``#`` sequence survives, while a setext heading still
+    normalizes to the default ATX face.
+    """
+    source = f'{source_head}\n\nbody\n'
+    expected = f'{rendered_head}\n\nbody\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == expected
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
+def test_heading_in_blockquote_defaults() -> None:
+    """A heading nested in a blockquote falls back to the default face."""
+    formatted = mdformat.text('> # Star* dangling *star\n', extensions={'wiki'})
+    assert formatted == '> # Star\\* dangling \\*star\n'
+
+
+def test_heading_in_list_keeps_face() -> None:
+    """A heading on a list continuation line keeps its source face.
+
+    The continuation line strips to the bare ATX face, so the verbatim
+    path applies even inside a container; a heading sharing its list
+    marker's line does not strip to it and falls back to the default
+    face.
+    """
+    source = '- item\n\n  # Star* dangling *star\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == source
+
+    # a heading on the marker's own line delegates
+    marker = mdformat.text('- # Star* dangling *star\n', extensions={'wiki'})
+    assert marker == '- # Star\\* dangling \\*star\n'
 
 
 @pytest.mark.parametrize(

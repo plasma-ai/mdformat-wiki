@@ -49,6 +49,9 @@ disturbing wiki page faces:
   (fences and content untouched).
 - A thematic break written exactly as `***` keeps that face; every other
   break style is normalized as usual.
+- ATX headings keep their original inline face verbatim — unbalanced
+  emphasis is never backslash-escaped and an optional closing `#`
+  sequence survives; setext headings still normalize to ATX.
 
 ### pre-commit
 

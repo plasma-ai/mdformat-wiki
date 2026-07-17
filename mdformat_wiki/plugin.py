@@ -91,8 +91,28 @@ def _render_hr(node: RenderTreeNode, context: RenderContext) -> str:
     return DEFAULT_RENDERERS['hr'](node, context)
 
 
+def _render_heading(node: RenderTreeNode, context: RenderContext) -> str:
+    """Render an ATX heading with its original source face verbatim.
+
+    The default renderer re-escapes the inline content (mangling faces
+    like an unbalanced ``*``) and drops an optional closing ``#``
+    sequence, so a heading whose source line strips to the bare ATX
+    face returns that line instead -- a list-item continuation line
+    qualifies. Setext headings and lines carrying container markup
+    (blockquote-nested, a heading sharing its list marker's line)
+    delegate to the default renderer.
+    """
+    lines = context.env.get(_SRC_LINES)
+    if lines is not None and node.map is not None and node.markup.startswith('#'):
+        line = lines[node.map[0]].strip()
+        if line == node.markup or line.startswith(node.markup + ' '):
+            return line
+    return DEFAULT_RENDERERS['heading'](node, context)
+
+
 RENDERERS = {
     'wikilink': _render_wikilink,
     'front_matter': _render_front_matter,
     'hr': _render_hr,
+    'heading': _render_heading,
 }
