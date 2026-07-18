@@ -126,6 +126,16 @@ Run linters and formatters:
 pre-commit run --all-files
 ```
 
+### Contributing
+
+The contribution workflow is covered by the organization-wide
+[CONTRIBUTING.md](https://github.com/plasma-ai/.github/blob/main/CONTRIBUTING.md);
+repository conventions live in
+[AGENTS.md](https://github.com/plasma-ai/mdformat-wiki/blob/main/AGENTS.md),
+and the release process (version sources, tagging, CI guard) in the
+organization-wide
+[RELEASING.md](https://github.com/plasma-ai/.github/blob/main/RELEASING.md).
+
 ## License
 
 Licensed under the Apache License 2.0 — see
