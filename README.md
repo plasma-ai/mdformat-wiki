@@ -1,6 +1,6 @@
 # mdformat-wiki
 
-[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/plasma-ai/mdformat-wiki/blob/main/LICENSE)
 [![build](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/build.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/build.yaml)
 [![lint](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/lint.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/lint.yaml)
 [![tests](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/tests.yaml/badge.svg)](https://github.com/plasma-ai/mdformat-wiki/actions/workflows/tests.yaml)
@@ -128,6 +128,7 @@ pre-commit run --all-files
 
 ## License
 
-Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
+Licensed under the Apache License 2.0 — see
+[LICENSE](https://github.com/plasma-ai/mdformat-wiki/blob/main/LICENSE).
 
 Copyright © 2026 Plasma AI
