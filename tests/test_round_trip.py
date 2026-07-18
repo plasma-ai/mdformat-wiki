@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 
 import mdformat
 import pytest
@@ -10,12 +11,21 @@ import pytest
 __all__ = [
     'test_round_trip',
     'test_front_matter_faces',
+    'test_frontmatter_bom_is_normalized_away',
+    'test_frontmatter_indented_dash_run_is_block_scalar_content',
+    'test_non_wiki_fences_are_not_frontmatter',
     'test_thematic_break_faces',
     'test_thematic_break_in_blockquote_defaults',
     'test_heading_faces',
     'test_heading_in_blockquote_defaults',
     'test_heading_in_list_keeps_face',
+    'test_link_row_desc_faces',
+    'test_non_row_prose_still_escapes',
+    'test_non_wikilink_brackets_use_healthy_escape',
     'test_wikilink_wrap_atomicity',
+    'test_link_row_multiline_escapes_survive',
+    'test_link_row_in_blockquote_defaults',
+    'test_bare_target_paragraph_is_prose',
     'test_footnote_composition',
 ]
 
@@ -58,20 +68,100 @@ def test_round_trip(relpath: str) -> None:
     [
         '---\nname: x\n\n---\n\nbody\n',
         '---\nname: x  \n---\n\nbody\n',
-        '----\nname: x\n----\n\nbody\n',
-        '-----\nname: x\n---------\n\nbody\n',
+        '  ---\nname: x\n---\n\nbody\n',
+        '---\nname: x\n---  \n\nbody\n',
     ],
-    ids=['trailing-blank-line', 'trailing-spaces', 'four-dashes', 'longer-close'],
+    ids=[
+        'trailing-blank-line',
+        'trailing-spaces',
+        'indented-open',
+        'close-trailing-spaces',
+    ],
 )
 def test_front_matter_faces(source: str) -> None:
     """Pathological-but-valid frontmatter still renders byte-verbatim.
 
-    Trailing blank lines or whitespace inside the block and 4+-dash
-    fences are all accepted by the ``mdit-py-plugins`` grammar, so the
+    Blank lines and trailing whitespace inside the block, whitespace
+    around the opening fence, and trailing whitespace after the closing
+    fence are all tolerated by the wiki reader's grammar, so the
     fences + content untouched contract covers them too.
     """
     formatted = mdformat.text(source, extensions={'wiki'})
     assert formatted == source
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
+def test_frontmatter_bom_is_normalized_away() -> None:
+    """A UTF-8 BOM before the opening fence is stripped, frontmatter kept.
+
+    The front-matter block rule matches ``---`` only at column 0 of line 0, so
+    a leading BOM would push the whole block into prose and re-render it as a
+    heading, silently destroying the frontmatter. The BOM normalizes away
+    (mirroring the wiki merge driver) while the frontmatter renders verbatim.
+    """
+    source = '\ufeff---\nname: alpha\ndesc: A page.\n---\n\n# Alpha\n'
+    expected = '---\nname: alpha\ndesc: A page.\n---\n\n# Alpha\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == expected
+
+    # the BOM is gone, so the stripped output now round-trips
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
+def test_frontmatter_indented_dash_run_is_block_scalar_content() -> None:
+    """An indented dash run inside a block scalar does not close the fence.
+
+    Only an unindented ``---`` closes frontmatter (matching the wiki
+    reader): a separator rule inside a block-scalar desc is content, so
+    the block survives intact instead of truncating there and silently
+    demoting the remaining keys to body.
+    """
+    source = (
+        '---\n'
+        'name: alpha\n'
+        'desc: |\n'
+        '  A separator rule follows in the desc:\n'
+        '  ----------\n'
+        '  and more desc after it.\n'
+        'tags: [x]\n'
+        '---\n'
+        '\n'
+        '# Alpha\n'
+    )
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == source
+
+    # wrapping reflows only body prose, never the frontmatter
+    wrapped = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
+    assert wrapped == source
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        '----\nname: x\n----\n\nbody\n',
+        '-----\nname: x\n---------\n\nbody\n',
+        '---\nname: x\nbody text\n',
+        '---\nname: x\n...\nbody\n',
+    ],
+    ids=['four-dashes', 'longer-close', 'unclosed', 'yaml-dots-close'],
+)
+def test_non_wiki_fences_are_not_frontmatter(source: str) -> None:
+    """Fences the wiki reader rejects parse as body, not frontmatter.
+
+    The wiki grammar opens only on a line stripping to exactly ``---``
+    and closes only on an unindented one, so 4+-dash fences, a YAML
+    ``...`` line, and an unclosed opener leave the file
+    frontmatter-less. The text formats as ordinary body markdown
+    instead of freezing a block the wiki reads as content.
+    """
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted.startswith(_DEFAULT_HR)
+    assert 'name: x' in formatted
 
     # second pass is stable
     second = mdformat.text(formatted, extensions={'wiki'})
@@ -215,6 +305,49 @@ def test_non_row_prose_still_escapes() -> None:
     ('source', 'expected'),
     [
         (
+            'See [[topics/alpha for details.\n',
+            'See [\\[topics/alpha for details.\n',
+        ),
+        ('A [[[weird bracket run.\n', 'A [[\\[weird bracket run.\n'),
+        ('x [[foo] bar.\n', 'x [[foo] bar.\n'),
+        (
+            '[[label]: x\n\n[label]: http://e.com\n',
+            '[[label]: x\n\n[label]: http://e.com\n',
+        ),
+        ('See [[foo](bar) here.\n', 'See [[foo](bar) here.\n'),
+    ],
+    ids=[
+        'unclosed',
+        'triple-run',
+        'bare-pair',
+        'used-ref-pair',
+        'link-adjacency',
+    ],
+)
+def test_non_wikilink_brackets_use_healthy_escape(source: str, expected: str) -> None:
+    r"""A non-wikilink ``[[`` escapes healthily, never as ``\[[``/``\[\[``.
+
+    The wiki's lint reads a backslash before double brackets as the
+    signature of formatter damage to a real wikilink, so the sanctioned
+    formatter must never produce it: in a bracket run only the last
+    ``[`` keeps its escape (``[\[``, matching the wiki's
+    ``escape_desc``), and a lone escape before a link token is bared.
+    Stability holds either way -- every output re-parses to the same
+    tokens.
+    """
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == expected
+    assert re.search(r'\\\[\\?\[', formatted) is None
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
+@pytest.mark.parametrize(
+    ('source', 'expected'),
+    [
+        (
             'Prose that runs long enough to push the following'
             ' [[conventions/python/modules|python module shape]] link'
             ' across the boundary.\n',
@@ -226,7 +359,7 @@ def test_non_row_prose_still_escapes() -> None:
             '[[topics/beta|beta]]: A deliberately long generated description'
             ' that pushes this link row well past seventy-two columns.\n',
             '[[topics/beta|beta]]: A deliberately long generated description'
-            ' that\npushes this link row well past seventy-two columns.\n',
+            ' that pushes this link row well past seventy-two columns.\n',
         ),
         (
             'A long prose paragraph that mentions [[topics/alpha]] midway'
@@ -234,29 +367,21 @@ def test_non_row_prose_still_escapes() -> None:
             'A long prose paragraph that mentions [[topics/alpha]] midway'
             ' through and\ntherefore wraps like any other body paragraph.\n',
         ),
-        (
-            '[[conventions/testing/style/docstrings-and-annotations'
-            '|docstrings-and-annotations]]: Uses **kwargs and'
-            ' __init__.py aggregation.\n',
-            '[[conventions/testing/style/docstrings-and-annotations'
-            '|docstrings-and-annotations]]:\nUses **kwargs and'
-            ' __init__.py aggregation.\n',
-        ),
     ],
     ids=[
         'spaced-label-moves-whole',
-        'link-row-tail-wraps',
+        'link-row-desc-verbatim',
         'prose-wraps',
-        'long-link-desc-verbatim',
     ],
 )
 def test_wikilink_wrap_atomicity(source: str, expected: str) -> None:
-    """Wikilinks are wrap-atomic; surrounding prose wraps freely.
+    """Wikilinks are wrap-atomic; prose wraps while link rows never do.
 
     A wikilink behaves like an inline code span under ``--wrap``: its
     internal spaces are never wrap points, so the whole ``[[...]]``
-    face moves between lines as one unit while the text around it --
-    including a link row's description tail -- fills normally.
+    face moves between lines as one unit while the prose around it
+    fills normally. An index link row is structured data and renders
+    verbatim -- no part of it wraps.
     """
     formatted = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
     assert formatted == expected
@@ -264,6 +389,47 @@ def test_wikilink_wrap_atomicity(source: str, expected: str) -> None:
     # second pass is stable
     second = mdformat.text(formatted, options={'wrap': 72}, extensions={'wiki'})
     assert second == formatted
+
+
+def test_link_row_multiline_escapes_survive() -> None:
+    r"""A link row's ``escape_desc`` continuations round-trip untouched.
+
+    The wiki escapes desc continuation lines that would parse as index
+    structure (``\***`` for the delimiter, ``[\[`` for a link-shaped
+    line). The row paragraph renders verbatim, so the escapes and line
+    breaks survive under both wrap modes -- decoding them would
+    oscillate the index against ``wiki update``, and the decoded desc
+    line would re-parse as a real wikilink (different HTML, a
+    formatting abort). Byte-identical output means ``--check`` passes.
+    """
+    source = '[[alpha|Alpha]]: First line.\n\\***\n[\\[other|p]]: not a real link.\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == source
+
+    wrapped = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
+    assert wrapped == source
+
+
+def test_link_row_in_blockquote_defaults() -> None:
+    """A link row nested in a blockquote falls back to the default path.
+
+    The verbatim renderer only fires at top level: a container
+    re-prefixes its children's rendered lines (``> ``), which would
+    double on a verbatim slice of source lines already carrying it.
+    """
+    formatted = mdformat.text('> [[a|b]]: quoted row.\n', extensions={'wiki'})
+    assert formatted == '> [[a|b]]: quoted row.\n'
+
+
+def test_bare_target_paragraph_is_prose() -> None:
+    """A paragraph opening ``[[target]]: ...`` (no label pipe) is prose.
+
+    The wiki row grammar requires ``[[target|label]]``, so a bare-target
+    opener is body text that keeps normal formatting (here, whitespace
+    normalization) rather than freezing verbatim.
+    """
+    formatted = mdformat.text('[[alpha]]: some  text.\n', extensions={'wiki'})
+    assert formatted == '[[alpha]]: some text.\n'
 
 
 def test_footnote_composition() -> None:

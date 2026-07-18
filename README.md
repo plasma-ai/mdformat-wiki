@@ -45,18 +45,25 @@ disturbing wiki page faces:
 - Wikilinks are wrap-atomic: under `--wrap`, the whole `[[...]]` face
   moves between lines as one unit, like an inline code span, while the
   prose around it fills normally.
-- YAML frontmatter at the start of a document renders byte-verbatim
-  (fences and content untouched).
+- YAML frontmatter renders byte-verbatim (fences and content untouched),
+  with the fence grammar matching the wiki reader exactly: the opener is
+  the first line stripping to `---`, only an unindented `---` closes (an
+  indented dash run inside a block scalar is content), and `----`/`...`
+  fences or an unclosed opener are not frontmatter. A leading UTF-8 BOM
+  is normalized away.
 - A thematic break written exactly as `***` keeps that face; every other
   break style is normalized as usual.
 - ATX headings keep their original inline face verbatim — unbalanced
   emphasis is never backslash-escaped and an optional closing `#`
   sequence survives; setext headings still normalize to ATX.
-- An index link-row description (`[[target|label]]: text`) renders its
-  text verbatim — a bare `*` or `_` (`**kwargs`, `_verb`) is never
-  backslash-escaped — while still wrapping under `--wrap`. A row whose
-  link alone exceeds the width breaks after `]]:`, dropping the
-  description to the next line.
+- An index link row (`[[target|label]]: description`) renders verbatim,
+  line breaks and escapes intact — a bare `*` or `_` (`**kwargs`,
+  `_verb`) is never backslash-escaped, and the row never reflows under
+  `--wrap`. The link block is the wiki's structured data; its bytes
+  round-trip.
+- A non-wikilink `[[` in body prose (an unclosed `[[foo`, a bracket run)
+  escapes in the healthy `[\[` shape — never the `\[[` shape the wiki's
+  lint flags as formatter damage.
 
 ### pre-commit
 
