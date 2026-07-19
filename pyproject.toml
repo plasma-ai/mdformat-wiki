@@ -1,21 +1,19 @@
 [project]
 name = "mdformat-wiki"
-version = "0.3.0"
+version = "0.4.0"
 description = "Mdformat plugin preserving wikilinks, frontmatter, and index delimiter."
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
-    { name = "Andrew Turner", email = "aturner@plasma.ai" },
-    { name = "Nicholas Diao", email = "ndiao@plasma.ai" },
+    { name = "Plasma AI", email = "eng@plasma.ai" },
 ]
 maintainers = [
-    { name = "Andrew Turner", email = "aturner@plasma.ai" },
-    { name = "Nicholas Diao", email = "ndiao@plasma.ai" },
+    { name = "Plasma AI", email = "eng@plasma.ai" },
 ]
 dependencies = [
-    "mdformat>=0.7,<2",
+    "mdformat>=1,<2",
 ]
 
 [project.urls]

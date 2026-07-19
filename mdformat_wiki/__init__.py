@@ -3,6 +3,7 @@
 Mdformat plugin preserving wikilinks, frontmatter, and index delimiter.
 """
 
-from .plugin import RENDERERS, update_mdit
+from . import plugin
+from .plugin import *
 
-__version__ = '0.3.0'
+__version__ = '0.4.0'

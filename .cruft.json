@@ -12,25 +12,17 @@
         "package": "mdformat-wiki",
         "title": "Mdformat Wiki",
         "description": "Mdformat plugin preserving wikilinks, frontmatter, and index delimiter.",
-        "version": "0.1.0",
+        "version": "0.4.0",
         "authors": [
           {
-            "name": "Andrew Turner",
-            "email": "aturner@plasma.ai"
-          },
-          {
-            "name": "Nicholas Diao",
-            "email": "ndiao@plasma.ai"
+            "name": "Plasma AI",
+            "email": "eng@plasma.ai"
           }
         ],
         "maintainers": [
           {
-            "name": "Andrew Turner",
-            "email": "aturner@plasma.ai"
-          },
-          {
-            "name": "Nicholas Diao",
-            "email": "ndiao@plasma.ai"
+            "name": "Plasma AI",
+            "email": "eng@plasma.ai"
           }
         ],
         "codecov": {

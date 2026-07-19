@@ -65,7 +65,7 @@ disturbing wiki page faces:
   escapes in the healthy `[\[` shape — never the `\[[` shape the wiki's
   lint flags as formatter damage.
 
-### pre-commit
+### Pre-commit Hook
 
 Repos that format markdown with a [pre-commit](https://pre-commit.com)
 hook need one line — add the plugin to the mdformat hook's
@@ -114,8 +114,8 @@ Run `./install.sh --help` for all options. Alternatively, run
 Installing a dependency as editable (e.g. a sibling package) is left to
 the caller: `uv pip install --editable <path>`.
 
-Once installed, run tools with `uv run <command>`, or activate the
-environment first (`source .venv/bin/activate`).
+Once installed, run tools with `uv run --no-sync <command>`, or activate
+the environment first (`source .venv/bin/activate`).
 
 ### Tests
 
@@ -135,13 +135,15 @@ pre-commit run --all-files
 
 ### Contributing
 
-The contribution workflow is covered by the organization-wide
-[CONTRIBUTING.md](https://github.com/plasma-ai/.github/blob/main/CONTRIBUTING.md);
-repository conventions live in
-[AGENTS.md](https://github.com/plasma-ai/mdformat-wiki/blob/main/AGENTS.md),
-and the release process (version sources, tagging, CI guard) in the
-organization-wide
-[RELEASING.md](https://github.com/plasma-ai/.github/blob/main/RELEASING.md).
+The contribution workflow, repository conventions, and release process
+(version sources, tagging, CI guard) are documented in:
+
+- Contribution workflow (organization-wide):
+  [CONTRIBUTING.md](https://github.com/plasma-ai/.github/blob/main/CONTRIBUTING.md)
+- Repository conventions:
+  [AGENTS.md](https://github.com/plasma-ai/mdformat-wiki/blob/main/AGENTS.md)
+- Release process (organization-wide):
+  [RELEASING.md](https://github.com/plasma-ai/.github/blob/main/RELEASING.md)
 
 ## License
 

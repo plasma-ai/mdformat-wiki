@@ -41,8 +41,11 @@ _ROUND_TRIP_CORPUS = [
     'code-fences.md',
     'headings.md',
 ]
-# mdformat's default thematic-break face (what non-``***`` sources become)
+# mdformat's default thematic-break face (what non-*** sources become)
 _DEFAULT_HR = '_' * 70
+
+
+# ------ round trip
 
 
 @pytest.mark.parametrize('relpath', _ROUND_TRIP_CORPUS)
@@ -63,9 +66,12 @@ def test_round_trip(relpath: str) -> None:
     assert second == formatted
 
 
+# ------ frontmatter
+
+
 @pytest.mark.parametrize(
-    'source',
-    [
+    argnames='source',
+    argvalues=[
         '---\nname: x\n\n---\n\nbody\n',
         '---\nname: x  \n---\n\nbody\n',
         '  ---\nname: x\n---\n\nbody\n',
@@ -141,8 +147,8 @@ def test_frontmatter_indented_dash_run_is_block_scalar_content() -> None:
 
 
 @pytest.mark.parametrize(
-    'source',
-    [
+    argnames='source',
+    argvalues=[
         '----\nname: x\n----\n\nbody\n',
         '-----\nname: x\n---------\n\nbody\n',
         '---\nname: x\nbody text\n',
@@ -168,9 +174,12 @@ def test_non_wiki_fences_are_not_frontmatter(source: str) -> None:
     assert second == formatted
 
 
+# ------ thematic breaks
+
+
 @pytest.mark.parametrize(
-    ('source_line', 'rendered_line'),
-    [
+    argnames=('source_line', 'rendered_line'),
+    argvalues=[
         ('***', '***'),
         ('  ***', '***'),
         ('*****', _DEFAULT_HR),
@@ -198,9 +207,12 @@ def test_thematic_break_in_blockquote_defaults() -> None:
     assert formatted == f'> {_DEFAULT_HR}\n'
 
 
+# ------ headings
+
+
 @pytest.mark.parametrize(
-    ('source_head', 'rendered_head'),
-    [
+    argnames=('source_head', 'rendered_head'),
+    argvalues=[
         ('# Star* dangling *star', '# Star* dangling *star'),
         ('# Trailing hash #', '# Trailing hash #'),
         ('# My *Wiki*', '# My *Wiki*'),
@@ -261,9 +273,12 @@ def test_heading_in_list_keeps_face() -> None:
     assert marker == '- # Star\\* dangling \\*star\n'
 
 
+# ------ link rows
+
+
 @pytest.mark.parametrize(
-    ('source_row', 'rendered_row'),
-    [
+    argnames=('source_row', 'rendered_row'),
+    argvalues=[
         (
             '[[api/kwargs|kwargs]]: Accepts **kwargs and _verb helpers.',
             '[[api/kwargs|kwargs]]: Accepts **kwargs and _verb helpers.',
@@ -301,9 +316,12 @@ def test_non_row_prose_still_escapes() -> None:
     assert formatted == 'Prose with \\*\\*kwargs and \\_verb.\n'
 
 
+# ------ bracket escaping
+
+
 @pytest.mark.parametrize(
-    ('source', 'expected'),
-    [
+    argnames=('source', 'expected'),
+    argvalues=[
         (
             'See [[topics/alpha for details.\n',
             'See [\\[topics/alpha for details.\n',
@@ -344,9 +362,12 @@ def test_non_wikilink_brackets_use_healthy_escape(source: str, expected: str) ->
     assert second == formatted
 
 
+# ------ wrapping
+
+
 @pytest.mark.parametrize(
-    ('source', 'expected'),
-    [
+    argnames=('source', 'expected'),
+    argvalues=[
         (
             'Prose that runs long enough to push the following'
             ' [[conventions/python/modules|python module shape]] link'
@@ -430,6 +451,9 @@ def test_bare_target_paragraph_is_prose() -> None:
     """
     formatted = mdformat.text('[[alpha]]: some  text.\n', extensions={'wiki'})
     assert formatted == '[[alpha]]: some text.\n'
+
+
+# ------ footnotes
 
 
 def test_footnote_composition() -> None:

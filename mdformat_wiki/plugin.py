@@ -15,6 +15,11 @@ from markdown_it.rules_core import StateCore
 from markdown_it.rules_inline import StateInline
 from mdformat.renderer import DEFAULT_RENDERERS, RenderContext, RenderTreeNode
 
+__all__ = [
+    'update_mdit',
+    'RENDERERS',
+]
+
 # env key for the source lines stashed at parse time (see the renderers)
 _SRC_LINES = 'mdformat_wiki_src_lines'
 
@@ -31,19 +36,26 @@ def update_mdit(mdit: MarkdownIt) -> None:
         mdit: Parser to extend, one per document mdformat formats.
 
     """
+    # register the front-matter block rule
     mdit.block.ruler.before(
-        'table',
-        'front_matter',
-        _frontmatter_rule,
-        {'alt': ['paragraph', 'reference', 'blockquote', 'list']},
+        beforeName='table',
+        ruleName='front_matter',
+        fn=_frontmatter_rule,
+        options={'alt': ['paragraph', 'reference', 'blockquote', 'list']},
     )
+    # register the atomic wikilink inline rule
     mdit.inline.ruler.before('link', 'wikilink', _wikilink_rule)
+    # register the BOM-normalizing core rule
     mdit.core.ruler.before('block', 'wiki_strip_bom', _strip_bom)
+    # register the source-stashing core rule
     mdit.core.ruler.push('wiki_stash_src', _stash_src)
 
 
 def _frontmatter_rule(
-    state: StateBlock, start_line: int, end_line: int, silent: bool
+    state: StateBlock,
+    start_line: int,
+    end_line: int,
+    silent: bool,
 ) -> bool:
     """Parse frontmatter with the wiki reader's fence grammar.
 
@@ -64,7 +76,7 @@ def _frontmatter_rule(
         Whether a frontmatter block was consumed.
 
     """
-    # opener: line 0 only, stripping to exactly ``---``
+    # opener: line 0 only, stripping to exactly ---
     if start_line != 0:
         return False
     first = state.src[state.bMarks[0] : state.eMarks[0]]
@@ -72,9 +84,8 @@ def _frontmatter_rule(
         return False
     if silent:
         return True
-    # closer: the next line stripping to ``---`` at column 0 (an
-    # indented dash run is block-scalar content); no closer -> the
-    # whole file is body
+    # closer: the next line stripping to --- at column 0
+    # (an indented dash run is block-scalar content)
     next_line = start_line
     while True:
         next_line += 1
@@ -85,6 +96,7 @@ def _frontmatter_rule(
         line = state.src[state.bMarks[next_line] : state.eMarks[next_line]]
         if line.rstrip() == '---':
             break
+    # emit the hidden front-matter token
     token = state.push('front_matter', '', 0)
     token.hidden = True
     token.markup = '---'
@@ -93,7 +105,9 @@ def _frontmatter_rule(
     ]
     token.block = True
     token.map = [start_line, next_line + 1]
+    # advance past the closer
     state.line = next_line + 1
+    # return the match
     return True
 
 
@@ -132,17 +146,23 @@ def _wikilink_rule(state: StateInline, silent: bool) -> bool:
         Whether a wikilink was consumed.
 
     """
+    # alias source and position
     src = state.src
     pos = state.pos
+    # check the opener
     if src[pos : pos + 2] != '[[':
         return False
+    # find the closer on the same line
     end = src.find(']]', pos + 2)
-    if end == -1 or '\n' in src[pos + 2 : end]:
+    if (end == -1) or ('\n' in src[pos + 2 : end]):
         return False
+    # emit the atomic wikilink token
     if not silent:
         token = state.push('wikilink', '', 0)
         token.content = src[pos + 2 : end]
+    # advance past the closer
     state.pos = end + 2
+    # return the match
     return True
 
 
@@ -154,7 +174,7 @@ def _render_wikilink(node: RenderTreeNode, context: RenderContext) -> str:
 def _render_front_matter(node: RenderTreeNode, context: RenderContext) -> str:
     """Render frontmatter byte-verbatim, fences and content untouched."""
     lines = context.env.get(_SRC_LINES)
-    if lines is not None and node.map is not None:
+    if (lines is not None) and (node.map is not None):
         region = lines[node.map[0] : node.map[1]]
         return '\n'.join(region)
     return f'---\n{node.content}\n---'
@@ -163,7 +183,7 @@ def _render_front_matter(node: RenderTreeNode, context: RenderContext) -> str:
 def _render_hr(node: RenderTreeNode, context: RenderContext) -> str:
     """Render a thematic break, preserving only the literal ``***`` face."""
     lines = context.env.get(_SRC_LINES)
-    if lines is not None and node.map is not None:
+    if (lines is not None) and (node.map is not None):
         if lines[node.map[0]].strip() == '***':
             return '***'
     return DEFAULT_RENDERERS['hr'](node, context)
@@ -181,27 +201,25 @@ def _render_heading(node: RenderTreeNode, context: RenderContext) -> str:
     delegate to the default renderer.
     """
     lines = context.env.get(_SRC_LINES)
-    if lines is not None and node.map is not None and node.markup.startswith('#'):
+    if (lines is not None) and (node.map is not None) and node.markup.startswith('#'):
         line = lines[node.map[0]].strip()
-        if line == node.markup or line.startswith(node.markup + ' '):
+        if (line == node.markup) or line.startswith(node.markup + ' '):
             return line
     return DEFAULT_RENDERERS['heading'](node, context)
 
 
-def _is_link_row(inline: RenderTreeNode) -> bool:
-    """Whether an inline node opens an index link row (``[[t|l]]: ...``).
+def _is_link_row(inline: RenderTreeNode, /) -> bool:
+    """Return whether an inline node opens an index link row (``[[t|l]]: ...``).
 
     Mirrors the wiki reader's row grammar: the label pipe is mandatory,
     so a body paragraph opening with a bare ``[[target]]`` is prose.
     """
     children = inline.children or ()
-    return (
-        len(children) >= 2
-        and children[0].type == 'wikilink'
-        and '|' in children[0].content
-        and children[1].type == 'text'
-        and children[1].content.startswith(':')
-    )
+    if len(children) < 2:
+        return False
+    labeled_link = (children[0].type == 'wikilink') and ('|' in children[0].content)
+    colon_text = (children[1].type == 'text') and children[1].content.startswith(':')
+    return labeled_link and colon_text
 
 
 def _render_paragraph(node: RenderTreeNode, context: RenderContext) -> str:
@@ -217,19 +235,18 @@ def _render_paragraph(node: RenderTreeNode, context: RenderContext) -> str:
     paragraph qualifies: a container re-prefixes its rendered lines
     (``> ``), which would double on a verbatim slice.
     """
+    # read the stashed source lines and the opening inline node
     lines = context.env.get(_SRC_LINES)
     inline = node.children[0] if node.children else None
-    if (
-        lines is not None
-        and node.map is not None
-        and node.parent is not None
-        and node.parent.type == 'root'
-        and inline is not None
-        and inline.type == 'inline'
-        and _is_link_row(inline)
-    ):
+    # bind the link-block qualification clauses
+    has_source = (lines is not None) and (node.map is not None)
+    top_level = (node.parent is not None) and (node.parent.type == 'root')
+    has_inline = (inline is not None) and (inline.type == 'inline')
+    # render a qualifying link block verbatim from source
+    if has_source and top_level and has_inline and _is_link_row(inline):
         region = lines[node.map[0] : node.map[1]]
         return '\n'.join(line.rstrip() for line in region)
+    # return the default rendering
     return DEFAULT_RENDERERS['paragraph'](node, context)
 
 
@@ -248,16 +265,17 @@ def _render_text(node: RenderTreeNode, context: RenderContext) -> str:
     bare ``[`` is inert (the same next-sibling pattern the default
     renderer uses for a trailing ``!``).
     """
+    # render with the default escaper, then reshape bracket-run escapes
     rendered = DEFAULT_RENDERERS['text'](node, context)
     rendered = re.sub(r'\\\[(?=\\?\[)', '[', rendered)
+    # bind the trailing-escape clauses
     next_sibling = node.next_sibling
-    if (
-        rendered.endswith('\\[')
-        and not rendered.endswith('\\\\[')
-        and next_sibling is not None
-        and next_sibling.type == 'link'
-    ):
+    trailing_escape = rendered.endswith('\\[') and not rendered.endswith('\\\\[')
+    next_is_link = (next_sibling is not None) and (next_sibling.type == 'link')
+    # bare a trailing escape formed against a following link token
+    if trailing_escape and next_is_link:
         rendered = rendered[:-2] + '['
+    # return the reshaped text
     return rendered
 
 

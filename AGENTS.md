@@ -12,7 +12,7 @@ parser-extension plugin built for wikis maintained by
 [plasma-wiki](https://github.com/plasma-ai/wiki).
 
 This plugin keeps wiki page faces byte-stable: `[[...]]` wikilinks parse
-atomically (never escaped, and wrap-atomic under `--wrap` -- the whole
+atomically (never escaped, and wrap-atomic under `--wrap` — the whole
 face moves between lines as one unit, like an inline code span), index
 link rows (`[[target|label]]: description`) render verbatim with their
 escapes and line breaks intact (never reflowed under `--wrap`),
