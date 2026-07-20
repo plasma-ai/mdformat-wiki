@@ -1,9 +1,8 @@
 # AGENTS
 
-This file provides guidance to coding agents (Claude Code, Codex) when
-working with code in this repository. If you are not Claude Code (which
-already reads parent directories), also check the parent directory for
-`AGENTS.md`.
+This file provides guidance to coding agents (Claude Code, Codex) when working
+with code in this repository. If you are not Claude Code (which already reads
+parent directories), also check the parent directory for `AGENTS.md`.
 
 ## Overview
 
@@ -12,22 +11,21 @@ parser-extension plugin built for wikis maintained by
 [plasma-wiki](https://github.com/plasma-ai/wiki).
 
 This plugin keeps wiki page faces byte-stable: `[[...]]` wikilinks parse
-atomically (never escaped, and wrap-atomic under `--wrap` — the whole
-face moves between lines as one unit, like an inline code span), index
-link rows (`[[target|label]]: description`) render verbatim with their
-escapes and line breaks intact (never reflowed under `--wrap`),
-frontmatter renders byte-verbatim with the fence grammar matching the
-wiki reader (only an unindented `---` closes; a leading BOM normalizes
-away), ATX headings keep their original inline face verbatim (no
-re-escaping, closing `#` sequences survive), and the index delimiter
-(written exactly as `***`) keeps its face while every other break style
-delegates to mdformat's default renderer.
+atomically (never escaped, and wrap-atomic under `--wrap` — the whole face moves
+between lines as one unit, like an inline code span), index link rows
+(`[[target|label]]: description`) render verbatim with their escapes and line
+breaks intact (never reflowed under `--wrap`), frontmatter renders byte-verbatim
+with the fence grammar matching the wiki reader (only an unindented `---`
+closes; a leading BOM normalizes away), ATX headings keep their original inline
+face verbatim (no re-escaping, closing `#` sequences survive), and the index
+delimiter (written exactly as `***`) keeps its face while every other break
+style delegates to mdformat's default renderer.
 
-The `mdformat_wiki` package holds its logic in `plugin.py` —
-`update_mdit()` registers the parse rules and `RENDERERS` overrides
-rendering, wildcard re-exported from `__init__.py` — with the pytest
-suite in `tests/` asserting byte-identical, idempotent round-trips over
-the static corpora in `tests/fixtures/`.
+The `mdformat_wiki` package holds its logic in `plugin.py` — `update_mdit()`
+registers the parse rules and `RENDERERS` overrides rendering, wildcard
+re-exported from `__init__.py` — with the pytest suite in `tests/` asserting
+byte-identical, idempotent round-trips over the static corpora in
+`tests/fixtures/`.
 
 ## Build & Development
 
