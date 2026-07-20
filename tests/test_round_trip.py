@@ -14,13 +14,17 @@ __all__ = [
     'test_frontmatter_bom_is_normalized_away',
     'test_frontmatter_indented_dash_run_is_block_scalar_content',
     'test_non_wiki_fences_are_not_frontmatter',
+    'test_frontmatter_in_blockquote_is_body',
     'test_thematic_break_faces',
     'test_thematic_break_in_blockquote_defaults',
     'test_heading_faces',
     'test_heading_in_blockquote_defaults',
     'test_heading_in_list_keeps_face',
     'test_link_row_desc_faces',
+    'test_link_row_dash_run_is_desc_content',
+    'test_link_row_keeps_trailing_hard_breaks',
     'test_non_row_prose_still_escapes',
+    'test_verbatim_faces_keep_reference_definitions',
     'test_non_wikilink_brackets_use_healthy_escape',
     'test_wikilink_wrap_atomicity',
     'test_link_row_multiline_escapes_survive',
@@ -174,6 +178,24 @@ def test_non_wiki_fences_are_not_frontmatter(source: str) -> None:
     assert second == formatted
 
 
+def test_frontmatter_in_blockquote_is_body() -> None:
+    """A quoted dash fence opening the document is body, not frontmatter.
+
+    The wiki reader sees ``> ---`` on line 0, not a fence, so the rule
+    must not match inside the blockquote -- a verbatim slice of the
+    still-prefixed source lines would gain another ``> `` from the
+    container renderer, doubling the markers on every pass.
+    """
+    source = '> ---\n> name: x\n> ---\n'
+    expected = f'> {_DEFAULT_HR}\n>\n> ## name: x\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == expected
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
 # ------ thematic breaks
 
 
@@ -310,10 +332,96 @@ def test_link_row_desc_faces(source_row: str, rendered_row: str) -> None:
     assert second == formatted
 
 
+@pytest.mark.parametrize(
+    argnames='desc_line',
+    argvalues=['----------', '---', '==========', '----|----'],
+    ids=['dash-run', 'three-dashes', 'equals-run', 'piped-dashes'],
+)
+def test_link_row_dash_run_is_desc_content(desc_line: str) -> None:
+    """A dash-run desc continuation is row content, not a setext underline.
+
+    The wiki writes a block-scalar page desc's separator rule at column
+    0 inside the link block, where block markdown would read it as a
+    setext underline (or, piped, a table delimiter) and turn the row
+    into a heading -- the entry would vanish from the block on the next
+    wiki read. The row parses atomically, so the run stays verbatim desc
+    content under both wrap modes.
+    """
+    source = (
+        '[[topics/alpha|alpha]]: Overview of alpha:\n'
+        f'{desc_line}\n'
+        'and more desc after it.\n'
+        '\n'
+        '[[topics/beta|beta]]: Beta desc.\n'
+    )
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == source
+
+    wrapped = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
+    assert wrapped == source
+
+
+def test_link_row_keeps_trailing_hard_breaks() -> None:
+    """A row's trailing hard-break spaces round-trip byte-verbatim.
+
+    Two trailing spaces are a hard line break: stripping them changes
+    the rendered HTML, and mdformat's equivalence check then refuses
+    the whole file with a misdiagnosis naming mdformat itself -- a
+    hand-authored break inside a row must instead pass through like
+    every other row byte.
+    """
+    source = '[[topics/alpha|alpha]]: desc with a break  \ncontinuation  \n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == source
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
 def test_non_row_prose_still_escapes() -> None:
     """Only a link-row desc bypasses escaping; ordinary prose does not."""
     formatted = mdformat.text('Prose with **kwargs and _verb.\n', extensions={'wiki'})
     assert formatted == 'Prose with \\*\\*kwargs and \\_verb.\n'
+
+
+# ------ reference definitions
+
+
+@pytest.mark.parametrize(
+    argnames='source',
+    argvalues=[
+        '# The [architecture][arch] overview\n'
+        '\n'
+        'body\n'
+        '\n'
+        '[arch]: https://example.com/doc\n',
+        '# Diagram ![alt][img] inline\n'
+        '\n'
+        'body\n'
+        '\n'
+        '[img]: https://example.com/diagram.png\n',
+        '[[topics/alpha|alpha]]: See the [architecture][arch] notes.\n'
+        '\n'
+        '[arch]: https://example.com/doc\n',
+    ],
+    ids=['heading-link', 'heading-image', 'link-row-link'],
+)
+def test_verbatim_faces_keep_reference_definitions(source: str) -> None:
+    """A reference used only inside a verbatim face keeps its definition.
+
+    The verbatim heading and link-row renderers return the source face
+    without descending into the inline children, whose default renderers
+    are what mark a reference label as used -- the labels register
+    explicitly instead, or mdformat would drop the ``[label]: url``
+    definition from the output, permanently deleting the URL.
+    """
+    formatted = mdformat.text(source, extensions={'wiki'})
+    assert formatted == source
+
+    # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
 
 
 # ------ bracket escaping
@@ -417,7 +525,7 @@ def test_link_row_multiline_escapes_survive() -> None:
 
     The wiki escapes desc continuation lines that would parse as index
     structure (``\***`` for the delimiter, ``[\[`` for a link-shaped
-    line). The row paragraph renders verbatim, so the escapes and line
+    line). The row block renders verbatim, so the escapes and line
     breaks survive under both wrap modes -- decoding them would
     oscillate the index against ``wiki update``, and the decoded desc
     line would re-parse as a real wikilink (different HTML, a

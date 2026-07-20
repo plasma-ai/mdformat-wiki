@@ -27,10 +27,10 @@ _SRC_LINES = 'mdformat_wiki_src_lines'
 def update_mdit(mdit: MarkdownIt) -> None:
     """Register the wiki syntax rules on the markdown-it parser.
 
-    Adds a front-matter block rule matching the wiki reader's fence
-    grammar, an atomic ``[[...]]`` wikilink inline rule, and core rules
-    normalizing a leading BOM and stashing the source lines for
-    face-sensitive rendering.
+    Adds front-matter and link-row block rules matching the wiki
+    reader's grammar, an atomic ``[[...]]`` wikilink inline rule, and
+    core rules normalizing a leading BOM and stashing the source lines
+    for face-sensitive rendering.
 
     Args:
         mdit: Parser to extend, one per document mdformat formats.
@@ -42,6 +42,12 @@ def update_mdit(mdit: MarkdownIt) -> None:
         ruleName='front_matter',
         fn=_frontmatter_rule,
         options={'alt': ['paragraph', 'reference', 'blockquote', 'list']},
+    )
+    # register the link-row block rule
+    mdit.block.ruler.before(
+        beforeName='table',
+        ruleName='link_row',
+        fn=_link_row_rule,
     )
     # register the atomic wikilink inline rule
     mdit.inline.ruler.before('link', 'wikilink', _wikilink_rule)
@@ -59,8 +65,11 @@ def _frontmatter_rule(
 ) -> bool:
     """Parse frontmatter with the wiki reader's fence grammar.
 
-    The opener is line 0 stripping to exactly ``---``; only an
-    unindented line stripping to ``---`` closes the block. An indented
+    The opener is line 0 stripping to exactly ``---``, at the top
+    level only -- inside a container the line numbers stay absolute
+    while the marks skip the container markup, but the raw face still
+    carries it (``> ---``), so the wiki reader sees body there. Only
+    an unindented line stripping to ``---`` closes the block. An indented
     dash run is block-scalar content, not a fence -- a closer that
     skips indentation would truncate the frontmatter there, silently
     demoting the rest to body. No closer means no frontmatter (the wiki
@@ -76,8 +85,10 @@ def _frontmatter_rule(
         Whether a frontmatter block was consumed.
 
     """
-    # opener: line 0 only, stripping to exactly ---
-    if start_line != 0:
+    # opener: top-level line 0 only, stripping to exactly ---
+    # (inside a container the marks skip the container markup, but the
+    # raw face carries it, so the wiki reader sees body there)
+    if (start_line != 0) or (state.parentType != 'root'):
         return False
     first = state.src[state.bMarks[0] : state.eMarks[0]]
     if first.strip() != '---':
@@ -107,6 +118,79 @@ def _frontmatter_rule(
     token.map = [start_line, next_line + 1]
     # advance past the closer
     state.line = next_line + 1
+    # return the match
+    return True
+
+
+def _link_row_rule(
+    state: StateBlock,
+    start_line: int,
+    end_line: int,
+    silent: bool,
+) -> bool:
+    r"""Parse an index link row (``[[t|l]]: ...``) as one atomic block.
+
+    A link block is structured data: the ``[[t|l]]`` faces, the
+    ``escape_desc`` backslashes on continuation lines (``\***``/``[\[``),
+    and the line breaks all round-trip unchanged, so the wiki reader
+    reads back exactly what it wrote and the index converges. To the
+    reader every contiguous non-blank line under the row is desc
+    continuation, but to block markdown some are structure -- a dash-run
+    line is a setext underline that would turn the row into a heading
+    (deleting the entry from the block) and a piped dash run would make
+    the row a table header -- so the row consumes its whole run before
+    those rules can see it. The label pipe and the colon are both
+    mandatory, mirroring the reader's row grammar: a body paragraph
+    opening with a bare ``[[target]]`` is prose. Only a top-level row
+    qualifies: a container re-prefixes its rendered lines (``> ``),
+    which would double on a verbatim slice. The token pair nests an
+    ``inline`` child like a paragraph's, so the desc still inline-parses
+    in the core phase (after reference collection) and the renderer can
+    register its reference labels as used.
+
+    Args:
+        state: Block parser state, positioned at the candidate opener.
+        silent: Probe for a match without emitting the token.
+
+    Returns:
+        Whether a link row was consumed.
+
+    """
+    # only a top-level, non-code line can open a row (nesting depth, not
+    # parentType, which a rejected lheading probe leaves as 'paragraph')
+    if (state.level != 0) or state.is_code_block(start_line):
+        return False
+    # opener: an atomic [[...]] face carrying the label pipe, with the
+    # colon tail directly after the closer
+    first = state.src[
+        state.bMarks[start_line] + state.tShift[start_line] : state.eMarks[start_line]
+    ]
+    if not first.startswith('[['):
+        return False
+    closer = first.find(']]', 2)
+    if closer == -1:
+        return False
+    if ('|' not in first[2:closer]) or (first[closer + 2 : closer + 3] != ':'):
+        return False
+    if silent:
+        return True
+    # consume the contiguous non-blank run
+    next_line = start_line + 1
+    while (next_line < end_line) and not state.isEmpty(next_line):
+        next_line += 1
+    # emit the link-row token pair around the desc's inline child
+    token = state.push('link_row_open', '', 1)
+    token.content = state.src[state.bMarks[start_line] : state.eMarks[next_line - 1]]
+    token.map = [start_line, next_line]
+    token = state.push('inline', '', 0)
+    token.content = state.getLines(
+        start_line, next_line, state.blkIndent, False
+    ).strip()
+    token.map = [start_line, next_line]
+    token.children = []
+    state.push('link_row_close', '', -1)
+    # advance past the row
+    state.line = next_line
     # return the match
     return True
 
@@ -189,6 +273,20 @@ def _render_hr(node: RenderTreeNode, context: RenderContext) -> str:
     return DEFAULT_RENDERERS['hr'](node, context)
 
 
+def _register_refs(node: RenderTreeNode, context: RenderContext) -> None:
+    """Record the reference labels under a verbatim-rendered node as used.
+
+    mdformat writes a ``[label]: url`` definition only when a renderer
+    adds its label to ``used_refs``, which the default link and image
+    renderers do while descending the inline children. A verbatim face
+    skips that descent, so it registers its reference-style links here
+    -- otherwise the definition is silently dropped from the output.
+    """
+    for child in node.walk(include_self=False):
+        if (child.type in ('link', 'image')) and child.meta.get('label'):
+            context.env['used_refs'].add(child.meta['label'])
+
+
 def _render_heading(node: RenderTreeNode, context: RenderContext) -> str:
     """Render an ATX heading with its original source face verbatim.
 
@@ -204,50 +302,28 @@ def _render_heading(node: RenderTreeNode, context: RenderContext) -> str:
     if (lines is not None) and (node.map is not None) and node.markup.startswith('#'):
         line = lines[node.map[0]].strip()
         if (line == node.markup) or line.startswith(node.markup + ' '):
+            _register_refs(node, context)
             return line
     return DEFAULT_RENDERERS['heading'](node, context)
 
 
-def _is_link_row(inline: RenderTreeNode, /) -> bool:
-    """Return whether an inline node opens an index link row (``[[t|l]]: ...``).
+def _render_link_row(node: RenderTreeNode, context: RenderContext) -> str:
+    """Render an index link row verbatim, escapes and line breaks intact.
 
-    Mirrors the wiki reader's row grammar: the label pipe is mandatory,
-    so a body paragraph opening with a bare ``[[target]]`` is prose.
+    Rendered from source like the frontmatter/``***`` faces: reflowing
+    (the default paragraph treatment) decodes the escapes away, which
+    oscillates the index against ``wiki update`` and can re-parse a desc
+    line as a real wikilink.
     """
-    children = inline.children or ()
-    if len(children) < 2:
-        return False
-    labeled_link = (children[0].type == 'wikilink') and ('|' in children[0].content)
-    colon_text = (children[1].type == 'text') and children[1].content.startswith(':')
-    return labeled_link and colon_text
-
-
-def _render_paragraph(node: RenderTreeNode, context: RenderContext) -> str:
-    r"""Render an index link-row paragraph verbatim, escapes and lines intact.
-
-    A link block is structured data: the ``[[t|l]]`` faces, the
-    ``escape_desc`` backslashes on continuation lines (``\***``/``[\[``),
-    and the line breaks all round-trip unchanged, so the wiki reader
-    reads back exactly what it wrote and the index converges. Reflowing
-    prose (the default) decodes the escapes away, which oscillates the
-    index and can re-parse a desc line as a real wikilink. Rendered from
-    source like the frontmatter/``***`` faces. Only a top-level
-    paragraph qualifies: a container re-prefixes its rendered lines
-    (``> ``), which would double on a verbatim slice.
-    """
-    # read the stashed source lines and the opening inline node
+    _register_refs(node, context)
     lines = context.env.get(_SRC_LINES)
-    inline = node.children[0] if node.children else None
-    # bind the link-block qualification clauses
-    has_source = (lines is not None) and (node.map is not None)
-    top_level = (node.parent is not None) and (node.parent.type == 'root')
-    has_inline = (inline is not None) and (inline.type == 'inline')
-    # render a qualifying link block verbatim from source
-    if has_source and top_level and has_inline and _is_link_row(inline):
+    if (lines is not None) and (node.map is not None):
+        # byte-verbatim like the frontmatter face -- stripping trailing
+        # whitespace would delete a hard break (two trailing spaces) and
+        # trip mdformat's HTML-equivalence check, wedging the file
         region = lines[node.map[0] : node.map[1]]
-        return '\n'.join(line.rstrip() for line in region)
-    # return the default rendering
-    return DEFAULT_RENDERERS['paragraph'](node, context)
+        return '\n'.join(region)
+    return node.content
 
 
 def _render_text(node: RenderTreeNode, context: RenderContext) -> str:
@@ -284,6 +360,6 @@ RENDERERS = {
     'front_matter': _render_front_matter,
     'hr': _render_hr,
     'heading': _render_heading,
-    'paragraph': _render_paragraph,
+    'link_row': _render_link_row,
     'text': _render_text,
 }
