@@ -23,6 +23,9 @@ __all__ = [
     'test_link_row_desc_faces',
     'test_link_row_dash_run_is_desc_content',
     'test_link_row_keeps_trailing_hard_breaks',
+    'test_link_row_wraps_at_numeric_width',
+    'test_link_row_wrap_freezes_load_bearing_lines',
+    'test_link_row_wrap_keeps_faces_atomic',
     'test_non_row_prose_still_escapes',
     'test_verbatim_faces_keep_reference_definitions',
     'test_non_wikilink_brackets_use_healthy_escape',
@@ -379,6 +382,68 @@ def test_link_row_keeps_trailing_hard_breaks() -> None:
     assert second == formatted
 
 
+def test_link_row_wraps_at_numeric_width() -> None:
+    """An over-width row rewraps to the numeric wrap column.
+
+    The row's line shape is the formatter's to own under a numeric
+    ``--wrap`` -- the wiki writer emits the desc's authored lines
+    verbatim behind the ``[[t|l]]: `` prefix, so a regenerated entry
+    can open far past the column and nothing else ever heals it. The
+    non-numeric modes stay byte-verbatim.
+    """
+    source = (
+        '[[conventions/docs/markdown/structure|structure]]: Canonical'
+        ' markdown shapes: 80-column wrap, ATX headings, dash bullets,\n'
+        'numbered lists, tagged fences.\n'
+    )
+    wrapped = mdformat.text(source, options={'wrap': 80}, extensions={'wiki'})
+    assert all(len(line) <= 80 for line in wrapped.splitlines())
+    # the desc text survives the rewrap word for word
+    assert ' '.join(wrapped.split()) == ' '.join(source.split())
+    # second pass is stable, and the default keep mode stays verbatim
+    second = mdformat.text(wrapped, options={'wrap': 80}, extensions={'wiki'})
+    assert second == wrapped
+    assert mdformat.text(source, extensions={'wiki'}) == source
+
+
+def test_link_row_wrap_freezes_load_bearing_lines() -> None:
+    r"""The row wrap never moves an escape, structure, or hard-break line.
+
+    A dash run is the setext shape the row rule exists to absorb, an
+    ``escape_desc`` face (``\***``) carries a column-0 escape the wiki
+    reader round-trips, and a trailing double space is a hard break --
+    each line's placement is semantics, so only the plain prose around
+    them rejoins and refills.
+    """
+    frozen = '----------\n\\*** an escaped face line\na hard break line  \n'
+    source = (
+        '[[topics/alpha|alpha]]: An opening line that runs well past the'
+        ' eighty column mark to force a refill\n' + frozen + 'plain tail.\n'
+    )
+    wrapped = mdformat.text(source, options={'wrap': 80}, extensions={'wiki'})
+    # the frozen lines survive byte-for-byte, in order
+    assert frozen in wrapped
+    # the opener rewrapped within the column
+    assert all(len(line) <= 80 for line in wrapped.splitlines())
+    # second pass is stable
+    second = mdformat.text(wrapped, options={'wrap': 80}, extensions={'wiki'})
+    assert second == wrapped
+
+
+def test_link_row_wrap_keeps_faces_atomic() -> None:
+    """A ``[[...]]`` face never splits across a wrapped row line."""
+    source = (
+        '[[topics/alpha|alpha]]: A desc mentioning the neighboring page'
+        ' face [[topics/beta-with-a-long-name|beta]] right at the column.\n'
+    )
+    wrapped = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
+    face = '[[topics/beta-with-a-long-name|beta]]'
+    assert any(face in line for line in wrapped.splitlines())
+    # second pass is stable
+    second = mdformat.text(wrapped, options={'wrap': 72}, extensions={'wiki'})
+    assert second == wrapped
+
+
 def test_non_row_prose_still_escapes() -> None:
     """Only a link-row desc bypasses escaping; ordinary prose does not."""
     formatted = mdformat.text('Prose with **kwargs and _verb.\n', extensions={'wiki'})
@@ -488,7 +553,7 @@ def test_non_wikilink_brackets_use_healthy_escape(source: str, expected: str) ->
             '[[topics/beta|beta]]: A deliberately long generated description'
             ' that pushes this link row well past seventy-two columns.\n',
             '[[topics/beta|beta]]: A deliberately long generated description'
-            ' that pushes this link row well past seventy-two columns.\n',
+            ' that\npushes this link row well past seventy-two columns.\n',
         ),
         (
             'A long prose paragraph that mentions [[topics/alpha]] midway'
@@ -499,18 +564,18 @@ def test_non_wikilink_brackets_use_healthy_escape(source: str, expected: str) ->
     ],
     ids=[
         'spaced-label-moves-whole',
-        'link-row-desc-verbatim',
+        'link-row-desc-wraps',
         'prose-wraps',
     ],
 )
 def test_wikilink_wrap_atomicity(source: str, expected: str) -> None:
-    """Wikilinks are wrap-atomic; prose wraps while link rows never do.
+    """Wikilinks are wrap-atomic; prose and link rows fill to the column.
 
     A wikilink behaves like an inline code span under ``--wrap``: its
     internal spaces are never wrap points, so the whole ``[[...]]``
     face moves between lines as one unit while the prose around it
-    fills normally. An index link row is structured data and renders
-    verbatim -- no part of it wraps.
+    fills normally. An index link row refills within the row grammar
+    (plain prose lines only -- escapes and structure shapes stay put).
     """
     formatted = mdformat.text(source, options={'wrap': 72}, extensions={'wiki'})
     assert formatted == expected

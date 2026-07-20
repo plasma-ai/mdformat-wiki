@@ -13,13 +13,15 @@ parser-extension plugin built for wikis maintained by
 This plugin keeps wiki page faces byte-stable: `[[...]]` wikilinks parse
 atomically (never escaped, and wrap-atomic under `--wrap` — the whole face moves
 between lines as one unit, like an inline code span), index link rows
-(`[[target|label]]: description`) render verbatim with their escapes and line
-breaks intact (never reflowed under `--wrap`), frontmatter renders byte-verbatim
-with the fence grammar matching the wiki reader (only an unindented `---`
-closes; a leading BOM normalizes away), ATX headings keep their original inline
-face verbatim (no re-escaping, closing `#` sequences survive), and the index
-delimiter (written exactly as `***`) keeps its face while every other break
-style delegates to mdformat's default renderer.
+(`[[target|label]]: description`) render from source with their escapes intact —
+plain prose lines refill to a numeric `--wrap` column while escape-carrying,
+structure-shaped, and hard-break lines keep their breaks (the non-numeric wrap
+modes stay byte-verbatim), frontmatter renders byte-verbatim with the fence
+grammar matching the wiki reader (only an unindented `---` closes; a leading BOM
+normalizes away), ATX headings keep their original inline face verbatim (no
+re-escaping, closing `#` sequences survive), and the index delimiter (written
+exactly as `***`) keeps its face while every other break style delegates to
+mdformat's default renderer.
 
 The `mdformat_wiki` package holds its logic in `plugin.py` — `update_mdit()`
 registers the parse rules and `RENDERERS` overrides rendering, wildcard

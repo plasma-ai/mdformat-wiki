@@ -23,6 +23,31 @@ __all__ = [
 # env key for the source lines stashed at parse time (see the renderers)
 _SRC_LINES = 'mdformat_wiki_src_lines'
 
+# a row line whose break placement is load-bearing, kept verbatim by the
+# row wrap: an escape_desc face (leading backslash or escaped bracket),
+# a structure-shaped opener a generic renderer would misread mid-join
+# (a bare thematic/setext run, headings, quotes, lists, tables, fences,
+# a row-shaped face the reader could take for a fresh entry), or a
+# hard-break tail (trailing double space or backslash); a dash run
+# followed by text (`-- like this`) is plain prose and refills freely
+_HAZARD_OPEN = re.compile(
+    r'^(\\|\[\\\[|\[\[[^]]*\|[^]]*\]\]:|#{1,6}(\s|$)|>|\||[-*+]\s|\d+[.)]\s'
+    r'|```|~~~)'
+)
+_HARD_BREAK_TAIL = re.compile(r'(  |\\)$')
+_FROZEN_ROW_LINE = re.compile(
+    _HAZARD_OPEN.pattern
+    + r'|^[|: ]*[-=*_]{2,}[-=*_|: ]*$'
+    + f'|{_HARD_BREAK_TAIL.pattern}'
+)
+
+# a bare setext/thematic run or piped table-delimiter shape -- never
+# emitted alone on a wrapped line
+_PURE_RUN = re.compile(r'[|:]*[-=*_]{2,}[-=*_|:]*')
+
+# one wrap atom: a whole [[...]] face with its colon tail, else a word
+_ROW_ATOM = re.compile(r'\[\[[^]]*\]\]\S*|\S+')
+
 
 def update_mdit(mdit: MarkdownIt) -> None:
     """Register the wiki syntax rules on the markdown-it parser.
@@ -132,8 +157,10 @@ def _link_row_rule(
 
     A link block is structured data: the ``[[t|l]]`` faces, the
     ``escape_desc`` backslashes on continuation lines (``\***``/``[\[``),
-    and the line breaks all round-trip unchanged, so the wiki reader
-    reads back exactly what it wrote and the index converges. To the
+    and every load-bearing line break round-trip unchanged, so the wiki
+    reader reads back exactly what it wrote and the index converges
+    (plain prose lines may refill to a numeric wrap column -- see
+    :func:`_wrap_link_row`). To the
     reader every contiguous non-blank line under the row is desc
     continuation, but to block markdown some are structure -- a dash-run
     line is a setext underline that would turn the row into a heading
@@ -308,22 +335,122 @@ def _render_heading(node: RenderTreeNode, context: RenderContext) -> str:
 
 
 def _render_link_row(node: RenderTreeNode, context: RenderContext) -> str:
-    """Render an index link row verbatim, escapes and line breaks intact.
+    """Render an index link row from source, wrapping only where safe.
 
-    Rendered from source like the frontmatter/``***`` faces: reflowing
-    (the default paragraph treatment) decodes the escapes away, which
-    oscillates the index against ``wiki update`` and can re-parse a desc
-    line as a real wikilink.
+    The faces render verbatim -- reflowing through the default paragraph
+    treatment decodes the escapes away, which oscillates the index
+    against ``wiki update`` and can re-parse a desc line as a real
+    wikilink. Under a numeric ``--wrap`` the row still honors the column
+    width: plain prose lines rewrap greedily with ``[[...]]`` faces
+    atomic, while escape-carrying, structure-shaped, and hard-break
+    lines keep their breaks (:func:`_wrap_link_row`). The non-numeric
+    modes (``keep``, ``no``) stay byte-verbatim like the frontmatter
+    face -- stripping even trailing whitespace would delete a hard break
+    (two trailing spaces) and trip mdformat's HTML-equivalence check,
+    wedging the file.
     """
     _register_refs(node, context)
     lines = context.env.get(_SRC_LINES)
     if (lines is not None) and (node.map is not None):
-        # byte-verbatim like the frontmatter face -- stripping trailing
-        # whitespace would delete a hard break (two trailing spaces) and
-        # trip mdformat's HTML-equivalence check, wedging the file
         region = lines[node.map[0] : node.map[1]]
+        wrap_mode = context.options['mdformat'].get('wrap', 'keep')
+        if isinstance(wrap_mode, int):
+            return _wrap_link_row(region, wrap_mode)
         return '\n'.join(region)
     return node.content
+
+
+def _wrap_link_row(region: list[str], width: int) -> str:
+    """Rewrap a link row's plain prose lines to ``width``, atoms intact.
+
+    The block rule absorbs every contiguous non-blank line regardless of
+    content, so a re-broken row still parses back as the same single
+    block -- what wrapping must preserve is the *reader's* view: frozen
+    lines (:data:`_FROZEN_ROW_LINE` -- escape faces, structure shapes,
+    hard-break tails) keep their breaks byte-for-byte, and only maximal
+    runs of plain prose lines rejoin and refill greedily. ``[[...]]``
+    faces travel as single atoms (the wikilink wrap-atomicity contract),
+    and an atom that lands at a fresh line's start but reads as frozen
+    structure there rides the previous line instead -- overflow is the
+    sanctioned escape for the unbreakable, never a new hazard line. The
+    opener line's face-plus-colon prefix counts toward the first line's
+    width like any other atom.
+
+    Args:
+        region: The row's source lines.
+        width: Numeric wrap column.
+
+    Returns:
+        The rewrapped row.
+
+    """
+    # partition into frozen lines and maximal plain runs; the opener's
+    # [[ face is the row itself (never structure), but a hard-break tail
+    # freezes it like any other line
+    output: list[str] = []
+    run: list[str] = []
+    for index, line in enumerate(region):
+        if index == 0:
+            frozen = _HARD_BREAK_TAIL.search(line) is not None
+        else:
+            frozen = _FROZEN_ROW_LINE.search(line) is not None
+        if frozen:
+            if run:
+                output.extend(_fill_atoms(' '.join(run), width))
+                run = []
+            output.append(line)
+        else:
+            run.append(line.strip())
+    if run:
+        output.extend(_fill_atoms(' '.join(run), width))
+    # return the rewrapped row
+    return '\n'.join(output)
+
+
+def _fill_atoms(text: str, width: int) -> list[str]:
+    """Greedily fill ``text``'s atoms into lines of at most ``width``.
+
+    A break never creates a load-bearing line the source never had: an
+    atom that would open a line as structure (a list marker, a stray
+    row face), a bare run left alone on a line (a setext underline), or
+    a backslash landing at a line's end (a minted hard break) rides the
+    adjacent line instead -- a long line is safe, a new hazard is not.
+
+    Args:
+        text: Space-joined plain prose.
+        width: Numeric wrap column.
+
+    Returns:
+        The filled lines.
+
+    """
+    atoms = _ROW_ATOM.findall(text)
+    lines: list[str] = []
+    current = ''
+    for index, atom in enumerate(atoms):
+        # fits on the current line (or opens it)
+        candidate = f'{current} {atom}' if current else atom
+        if (not current) or (len(candidate) <= width):
+            current = candidate
+            continue
+        # breaking here would open a structure-shaped line, strand a
+        # bare run alone as the final line, or leave a backslash tail
+        # minting a hard break -- overflow instead (marker shapes probe
+        # with following text: '- x' is a list, '-- x' is prose)
+        run_alone = (index == len(atoms) - 1) and _PURE_RUN.fullmatch(atom)
+        if (
+            _HAZARD_OPEN.search(f'{atom} x')
+            or run_alone
+            or current.endswith('\\')
+            or _PURE_RUN.fullmatch(current)
+        ):
+            current = candidate
+            continue
+        lines.append(current)
+        current = atom
+    if current:
+        lines.append(current)
+    return lines
 
 
 def _render_text(node: RenderTreeNode, context: RenderContext) -> str:
