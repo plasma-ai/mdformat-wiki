@@ -210,9 +210,13 @@ def _link_row_rule(
     token.content = state.src[state.bMarks[start_line] : state.eMarks[next_line - 1]]
     token.map = [start_line, next_line]
     token = state.push('inline', '', 0)
-    token.content = state.getLines(
-        start_line, next_line, state.blkIndent, False
-    ).strip()
+    row = state.getLines(
+        begin=start_line,
+        end=next_line,
+        indent=state.blkIndent,
+        keepLastLF=False,
+    )
+    token.content = row.strip()
     token.map = [start_line, next_line]
     token.children = []
     state.push('link_row_close', '', -1)
