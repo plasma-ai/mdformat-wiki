@@ -23,6 +23,7 @@ __all__ = [
     'test_link_row_desc_faces',
     'test_link_row_dash_run_is_desc_content',
     'test_link_row_keeps_trailing_hard_breaks',
+    'test_link_row_fence_absorption_is_stable',
     'test_link_row_wraps_at_numeric_width',
     'test_link_row_wrap_freezes_load_bearing_lines',
     'test_link_row_wrap_keeps_faces_atomic',
@@ -378,6 +379,29 @@ def test_link_row_keeps_trailing_hard_breaks() -> None:
     assert formatted == source
 
     # second pass is stable
+    second = mdformat.text(formatted, extensions={'wiki'})
+    assert second == formatted
+
+
+def test_link_row_fence_absorption_is_stable() -> None:
+    """A fence opened directly under a row absorbs by grammar, stably.
+
+    To the wiki reader every contiguous non-blank line under a row is
+    desc continuation -- a fence opener there is desc text, not a
+    fence, so the row faithfully absorbs it through the fence's first
+    internal blank line. The stranded remainder then reflows as plain
+    markdown (its orphaned closer opens a fresh fence mdformat
+    terminates at EOF). The absorbed shape is the documented cost of
+    mirroring the reader's grammar; what this pins is the safety
+    floor: the row face survives verbatim and the reflow reaches a
+    fixed point on the first pass instead of drifting per run.
+    """
+    source = '[[topics/alpha|alpha]]: desc line\n```python\nx = 1\n\ny = 2\n```\n'
+    formatted = mdformat.text(source, extensions={'wiki'})
+    # the row region (row through the fence's first internal blank)
+    # passes through byte-verbatim
+    assert formatted.startswith('[[topics/alpha|alpha]]: desc line\n```python\nx = 1\n')
+    # one pass reaches the fixed point -- no per-run drift
     second = mdformat.text(formatted, extensions={'wiki'})
     assert second == formatted
 
