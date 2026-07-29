@@ -20,12 +20,16 @@ dependencies = [
 Homepage = "https://github.com/plasma-ai/mdformat-wiki"
 Repository = "https://github.com/plasma-ai/mdformat-wiki"
 Issues = "https://github.com/plasma-ai/mdformat-wiki/issues"
+Changelog = "https://github.com/plasma-ai/mdformat-wiki/blob/main/CHANGELOG.md"
 
 [project.entry-points."mdformat.parser_extension"]
 wiki = "mdformat_wiki"
 
 [tool.poetry]
 packages = [{include = "mdformat_wiki"}]
+include = [
+    { path = "CHANGELOG.md", format = ["sdist"] },
+]
 
 [dependency-groups]
 lint = [
