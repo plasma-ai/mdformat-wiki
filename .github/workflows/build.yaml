@@ -52,6 +52,11 @@ jobs:
         run: |
           export LC_ALL=C
           tracked=$(git ls-files mdformat_wiki | sort)
+          # an empty listing would compare as nothing missing
+          if [[ -z "$tracked" ]]; then
+            echo "::error::no tracked files under mdformat_wiki/"
+            exit 1
+          fi
           # the sdist nests every path under its top folder
           missing=$(
             comm -23 <(echo "$tracked") <(unzip -Z1 dist/mdformat_wiki-*.whl | sort) | sed 's/^/::error::wheel lacks /'
